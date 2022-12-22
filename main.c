@@ -1,13 +1,13 @@
 /******************************************************************************
 * File Name:   main.c
 *
-* Description: This is the source code for the RutDevKit-RutCO2Alarm
+* Description: This is the source code for the RDK3-TextToSpeech_Demo
 *              Application for ModusToolbox.
 *
 * Related Document: See README.md
 *
 *
-*  Created on: 2022-08-23
+*  Created on: 2022-12-21
 *  Company: Rutronik Elektronische Bauelemente GmbH
 *  Address: Jonavos g. 30, Kaunas 44262, Lithuania
 *  Author: GDR
@@ -57,9 +57,27 @@
 #include "cy_retarget_io.h"
 #include "spi_api.h"
 
-#define GREETING_PHRASE		0
+/*First and last phrases of the TTS list*/
+#define FIRST_PHRASE			0
+#define LAST_PHRASE				5
 
+/*Priority for button interrupts*/
+#define BTN_IRQ_PRIORITY		5
+
+/*Function prototypes used for this demo.*/
 void handle_error(void);
+void btn_interrupt_handler(void *handler_arg, cyhal_gpio_event_t event);
+
+cyhal_gpio_callback_data_t btn_data =
+{
+		.callback = btn_interrupt_handler,
+		.callback_arg = NULL,
+};
+
+/*The variables for playing phrases*/
+_Bool play_next = false;
+int16_t current_phrase;
+
 
 int main(void)
 {
@@ -84,8 +102,21 @@ int main(void)
     if (result != CY_RSLT_SUCCESS)
     {handle_error();}
 
-    cyhal_gpio_write((cyhal_gpio_t)LED1, CYBSP_LED_STATE_ON);
+    /*Indicate the beginning of the initialization*/
+	cyhal_gpio_write((cyhal_gpio_t)LED1, CYBSP_LED_STATE_OFF);
+	cyhal_gpio_write((cyhal_gpio_t)LED2, CYBSP_LED_STATE_OFF);
+	cyhal_gpio_write((cyhal_gpio_t)LED3, CYBSP_LED_STATE_ON);
 
+    /*Initialize Button*/
+    result = cyhal_gpio_init(USER_BTN, CYHAL_GPIO_DIR_INPUT, CYHAL_GPIO_DRIVE_NONE, false);
+    if (result != CY_RSLT_SUCCESS)
+    {handle_error();}
+
+    /*Register callback function */
+    cyhal_gpio_register_callback(USER_BTN, &btn_data);
+
+    /* Enable falling edge interrupt event */
+    cyhal_gpio_enable_event(USER_BTN, CYHAL_GPIO_IRQ_FALL, BTN_IRQ_PRIORITY, true);
     __enable_irq();
 
     result = cy_retarget_io_init( KITPROG_TX, KITPROG_RX, CY_RETARGET_IO_BAUDRATE);
@@ -130,35 +161,57 @@ int main(void)
 	printf("S1V30340 SPI Initialization succeeded. \n\r");
 
 	/*Play the greeting*/
+	current_phrase = FIRST_PHRASE;
 	GPIO_ControlMute(1); /*Mute - OFF*/
-	S1V30340_Play_Specific_Audio(GREETING_PHRASE);
+	printf("Playing a phrase: %i. \n\r", current_phrase);
+	S1V30340_Play_Specific_Audio(current_phrase);
 	S1V30340_Wait_For_Termination();
 	GPIO_ControlMute(0); /*Mute - ON*/
 
-	cyhal_gpio_write((cyhal_gpio_t)LED1, CYBSP_LED_STATE_OFF);
+    /*Indicate the end of the initialization*/
 	cyhal_gpio_write((cyhal_gpio_t)LED2, CYBSP_LED_STATE_ON);
+	cyhal_gpio_write((cyhal_gpio_t)LED3, CYBSP_LED_STATE_OFF);
 
     for (;;)
     {
     	CyDelay(500);
-    	GPIO_ControlMute(1); /*Mute - OFF*/
-    	for(uint8_t i = 1; i < 10; i++)
+
+    	if(play_next)
     	{
-    		cyhal_gpio_toggle(LED2);
-        	S1V30340_Play_Specific_Audio(GREETING_PHRASE+i);
-        	printf("Playing phrase %d. \n\r", GREETING_PHRASE+i);
-        	S1V30340_Wait_For_Termination();
+    		cyhal_gpio_write((cyhal_gpio_t)LED2, CYBSP_LED_STATE_OFF);
+    		cyhal_gpio_write((cyhal_gpio_t)LED3, CYBSP_LED_STATE_ON);
+
+    		play_next = false;
+    		current_phrase++;
+    		if(current_phrase > LAST_PHRASE)
+    		{
+    			current_phrase = FIRST_PHRASE;
+    		}
+    		printf("Playing a phrase: %i. \n\r", current_phrase);
+    		GPIO_ControlMute(1); /*Mute - OFF*/
+    		S1V30340_Play_Specific_Audio(current_phrase);
+    		S1V30340_Wait_For_Termination();
+    		GPIO_ControlMute(0); /*Mute - ON*/
+
+    		cyhal_gpio_write((cyhal_gpio_t)LED2, CYBSP_LED_STATE_ON);
+    		cyhal_gpio_write((cyhal_gpio_t)LED3, CYBSP_LED_STATE_OFF);
     	}
-    	GPIO_ControlMute(0); /*Mute - ON*/
-    	cyhal_gpio_write((cyhal_gpio_t)LED2, CYBSP_LED_STATE_ON);
     }
+}
+
+/* Interrupt handler callback function */
+void btn_interrupt_handler(void *handler_arg, cyhal_gpio_event_t event)
+{
+	CY_UNUSED_PARAMETER(handler_arg);
+    CY_UNUSED_PARAMETER(event);
+
+    play_next = true;
 }
 
 void handle_error(void)
 {
      /* Disable all interrupts. */
     __disable_irq();
-
     cyhal_gpio_write((cyhal_gpio_t)LED1, CYBSP_LED_STATE_OFF);
     cyhal_gpio_write((cyhal_gpio_t)LED2, CYBSP_LED_STATE_OFF);
     cyhal_gpio_write((cyhal_gpio_t)LED3, CYBSP_LED_STATE_ON);

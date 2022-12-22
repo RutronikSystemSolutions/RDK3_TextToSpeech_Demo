@@ -8,7 +8,7 @@ This example demonstrates the Rutronik's Text-To-Speech Arduino adapter control.
 
 ## Requirements
 
-- [ModusToolbox® software](https://www.infineon.com/cms/en/design-support/tools/sdk/modustoolbox-software/) v2.4
+- [ModusToolbox® software](https://www.infineon.com/cms/en/design-support/tools/sdk/modustoolbox-software/) v3.0
 
 ### Using the code example with a ModusToolbox IDE:
 
